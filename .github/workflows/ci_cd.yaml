@@ -1,0 +1,101 @@
+
+name: Running CI/CD pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+        
+    workflow_execution:   
+      name: CI/CD pipeline
+      runs-on: kubernetes_runner
+      timeout-minutes: 30
+        
+      steps:
+      - name: AZ Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZ_CREDENTIALS }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+      
+      - name: Setup kubelogin
+        uses: azure/use-kubelogin@v1
+        with:
+          kubelogin-version: 'v0.0.30'
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: test
+          cluster-name: test
+          admin: 'true'
+          use-kubelogin: 'true'
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Set image tag
+        id: set_latest_tag
+        run: |
+          echo "image_tag=pv-$(date +"%Y-%m-%d_%H%M%S")" >>  $GITHUB_OUTPUT
+
+      - name: Validate image tag
+        run: |
+          echo ${{ steps.set_latest_tag.outputs.image_tag }}
+
+      - name: Build and run tests
+        run: |
+          docker build . -t ${{secrets.azure_container_registry}}.azurecr.io/my-app:${{ steps.set_latest_tag.outputs.image_tag }}
+          pip install -r ./requirements.txt
+          pytest ./tests -v --maxfail=1
+
+      - name: Push to ACR
+        run: |
+          az acr login --name ${{secrets.azure_container_registry}}
+          docker push ${{secrets.azure_container_registry}}.azurecr.io/my-app:${{ steps.set_latest_tag.outputs.image_tag }}
+
+      - name: Generate deployment file and deploy it
+        run: |
+          python3 .github/workflows/util/template_handler/update_template.py  \
+          --environment pv \
+          --image_tag ${{ steps.set_latest_tag.outputs.image_tag }} \
+          --template .github/workflows/util/templates/deployment_template.j2 \
+          --config .github/workflows/util/configurations/configurations.yaml
+
+      - name: Verifying the content of deployment yaml
+        run: cat deployment_pv.yaml
+
+      - name: Deployment
+        run: kubectl apply -f deployment_pv.yaml
+
+    notification:
+      name: 'Publish Results'
+      runs-on: kubernetes_runner
+      needs: workflow_execution
+      if: ${{ always() && !cancelled() }}
+    
+      steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+    
+      - name: Run Notification Script
+        env:
+          SENDER: ${{ vars.SENDER_EMAIL }}
+          SMTP_SERVER: ${{ vars.SMTP_SERVER }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          RECIPIENT: ${{vars.RECIPIENT }}
+          TEAMS_WEBHOOK: ${{vars.WEBHOOK }}
+          MESSAGE: ${{ needs.workflow_execution.result == 'success' && 'CICD is Successful'  || 'CICD is failed' }}
+        run: |
+            echo $MESSAGE
+            python3 .github/workflows/util/notification/main.py \
+            --sender "$SENDER" \
+            --smtp_server "$SMTP_SERVER" \
+            --smtp_port "$SMTP_PORT" \
+            --recipient "$RECIPIENT" \
+            --webhook "$TEAMS_WEBHOOK" \
+            --message "$MESSAGE"

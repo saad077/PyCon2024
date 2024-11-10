@@ -1,0 +1,47 @@
+dev:
+  namespace: 'test'
+  environment: 'dev'
+  replicas: 1
+  acr_image: 'abcde.azurecr.io/my-app'
+  container_port: 5009
+  memory_request: '128Mi'
+  cpu_request: '100m'
+  memory_limit: '256Mi'
+  cpu_limit: '250m'
+  image_pull_secret: 'dev-acr-secret'
+
+qa:
+  namespace: 'test'
+  environment: 'qa'
+  replicas: 2
+  acr_image: 'abcd.azurecr.io/my-app'
+  container_port: 5009
+  memory_request: '256Mi'
+  cpu_request: '250m'
+  memory_limit: '512Mi'
+  cpu_limit: '500m'
+  image_pull_secret: 'acr-docker-registry'
+
+pv:
+  namespace: 'test'
+  environment: 'pv'
+  replicas: 2
+  acr_image: 'abc.azurecr.io/my-app'
+  container_port: 5009
+  memory_request: '256Mi'
+  cpu_request: '250m'
+  memory_limit: '512Mi'
+  cpu_limit: '500m'
+  image_pull_secret: 'acr-docker-registry'
+
+prod:
+  namespace: 'test'
+  environment: 'prod'
+  replicas: 3
+  acr_image: 'acrkxsshrplatformcsd2cac01.azurecr.io/my-app'
+  container_port: 5009
+  memory_request: '512Mi'
+  cpu_request: '500m'
+  memory_limit: '1Gi'
+  cpu_limit: '1000m'
+  image_pull_secret: 'prod-acr-secret'
